@@ -25,7 +25,7 @@ const char* WIFI_SSID = "WPI-IEEE-ARDUINO-WS";
 const char* WIFI_PASSWORD = "wpiieee26";
 
 // Server configuration - UPDATE THIS
-const char* SERVER_IP = "192.168.1.100";  // Change to your server's IP
+const char* SERVER_IP = "192.168.0.100";  // Change to your server's IP
 const int SERVER_PORT = 5000;
 const char* SERVER_URL = "/song";
 

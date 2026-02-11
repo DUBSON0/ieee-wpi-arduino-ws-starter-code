@@ -1,27 +1,28 @@
 /*
- * ESP32 Radio Client
+ * ESP8266 Radio Client
  * 
  * Connects to WiFi, reads potentiometer to select station (0-9),
  * and plays songs from server when play button is pressed.
  * 
  * Hardware:
- * - Buzzer on pin 10 (GPIO 10)
- * - Potentiometer on GPIO 36 (ADC1_CH0) - selects station
- * - Play button on GPIO 2 - press to play selected station
- * - Loop button on GPIO 3 - toggle loop on/off
+ * - Buzzer on GPIO 14 (D5)
+ * - Potentiometer on A0 (only analog input on ESP8266)
+ * - Play button on GPIO 5 (D1) - press to play selected station
+ * - Loop button on GPIO 4 (D2) - toggle loop on/off
  * 
  * Configuration:
  * - Set WIFI_SSID and WIFI_PASSWORD
  * - Set SERVER_IP to your server's IP address
  */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 
 // WiFi credentials - UPDATE THESE
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID = "WPI-IEEE-ARDUINO-WS";
+const char* WIFI_PASSWORD = "wpiieee26";
 
 // Server configuration - UPDATE THIS
 const char* SERVER_IP = "192.168.1.100";  // Change to your server's IP
@@ -29,18 +30,14 @@ const int SERVER_PORT = 5000;
 const char* SERVER_URL = "/song";
 
 // Hardware pins
-const int BUZZER_PIN = 10;  // GPIO 10
-const int POTENTIOMETER_PIN = 36;  // GPIO 36 (ADC1_CH0)
-const int PLAY_BUTTON_PIN = 2;  // GPIO 2 - press to play song
-const int LOOP_BUTTON_PIN = 3;  // GPIO 3 - toggle loop on/off
-
-// LEDC (PWM) configuration for tone generation
-const int LEDC_CHANNEL = 0;
-const int LEDC_RESOLUTION = 8;  // 8-bit resolution
+const int BUZZER_PIN = 14;          // GPIO 14 (D5)
+const int POTENTIOMETER_PIN = A0;   // A0 (only ADC pin on ESP8266)
+const int PLAY_BUTTON_PIN = 5;      // GPIO 5 (D1) - press to play song
+const int LOOP_BUTTON_PIN = 4;      // GPIO 4 (D2) - toggle loop on/off
 
 // Station configuration
 const int NUM_STATIONS = 10;
-const int POTENTIOMETER_MAX = 4095;  // ESP32 ADC is 12-bit (0-4095)
+const int POTENTIOMETER_MAX = 1023;  // ESP8266 ADC is 10-bit (0-1023)
 
 // Song data storage
 const int MAX_SONG_LENGTH = 100;
@@ -59,25 +56,8 @@ unsigned long lastNoteTime = 0;  // Timing for note playback
 bool lastPlayButtonState = HIGH;
 bool lastLoopButtonState = HIGH;
 
-// ESP32 tone function using LEDC
-// Generates a square wave at the specified frequency
-void tone(int pin, unsigned int frequency) {
-  if (frequency == 0) {
-    noTone(pin);
-    return;
-  }
-  // Setup LEDC channel: frequency is the PWM frequency (which becomes our tone frequency)
-  // Resolution of 8 bits gives us 256 levels
-  ledcSetup(LEDC_CHANNEL, frequency, LEDC_RESOLUTION);
-  ledcAttachPin(pin, LEDC_CHANNEL);
-  // Set duty cycle to 50% for square wave tone (128 = 50% of 255)
-  ledcWrite(LEDC_CHANNEL, 128);
-}
-
-void noTone(int pin) {
-  // Set duty cycle to 0 to stop sound
-  ledcWrite(LEDC_CHANNEL, 0);
-}
+// WiFiClient instance for HTTP requests
+WiFiClient wifiClient;
 
 void setup() {
   Serial.begin(115200);
@@ -85,11 +65,11 @@ void setup() {
   
   // Configure pins
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(POTENTIOMETER_PIN, INPUT);
+  // A0 does not need pinMode on ESP8266
   pinMode(PLAY_BUTTON_PIN, INPUT_PULLUP);  // Button with internal pull-up
   pinMode(LOOP_BUTTON_PIN, INPUT_PULLUP);  // Button with internal pull-up
   
-  Serial.println("\nESP32 Radio Client Starting...");
+  Serial.println("\nESP8266 Radio Client Starting...");
   
   // Connect to WiFi
   connectToWiFi();
@@ -185,7 +165,7 @@ bool requestSong(int station) {
   Serial.print("Requesting song from: ");
   Serial.println(url);
   
-  http.begin(url);
+  http.begin(wifiClient, url);  // ESP8266 requires WiFiClient as first arg
   http.setTimeout(5000);  // 5 second timeout
   
   int httpCode = http.GET();
@@ -279,7 +259,7 @@ void playSong() {
   unsigned long currentTime = millis();
   
   // Check if it's time to play the next note
-  if (currentTime - lastNoteTime >= songDurations[currentNoteIndex]) {
+  if (currentTime - lastNoteTime >= (unsigned long)songDurations[currentNoteIndex]) {
     // Stop previous note
     noTone(BUZZER_PIN);
     
